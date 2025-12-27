@@ -726,10 +726,77 @@
                     this.loadContent();
                 },
 
+                // Transform markdown for Discourse compatibility
+                // Converts Dev.to Liquid tags to plain URLs for Onebox embedding
+                transformForDiscourse(markdown) {
+                    if (!markdown) return '';
+
+                    let result = markdown;
+
+                    // {% embed URL %} - generic embed
+                    result = result.replace(/\{%\s*embed\s+(https?:\/\/[^\s%]+)\s*%\}/gi, '\n$1\n');
+
+                    // {% twitter URL %} or {% tweet URL %}
+                    result = result.replace(/\{%\s*(?:twitter|tweet)\s+(https?:\/\/[^\s%]+)\s*%\}/gi, '\n$1\n');
+
+                    // {% youtube VIDEO_ID %} - convert to full URL
+                    result = result.replace(/\{%\s*youtube\s+([a-zA-Z0-9_-]{11})\s*%\}/gi, '\nhttps://www.youtube.com/watch?v=$1\n');
+
+                    // {% youtube URL %} - already a URL
+                    result = result.replace(/\{%\s*youtube\s+(https?:\/\/[^\s%]+)\s*%\}/gi, '\n$1\n');
+
+                    // {% vimeo VIDEO_ID %}
+                    result = result.replace(/\{%\s*vimeo\s+(\d+)\s*%\}/gi, '\nhttps://vimeo.com/$1\n');
+
+                    // {% codepen URL %}
+                    result = result.replace(/\{%\s*codepen\s+(https?:\/\/[^\s%]+)\s*%\}/gi, '\n$1\n');
+
+                    // {% codesandbox ID %}
+                    result = result.replace(/\{%\s*codesandbox\s+([^\s%]+)\s*%\}/gi, '\nhttps://codesandbox.io/s/$1\n');
+
+                    // {% github URL %} or {% gh URL %}
+                    result = result.replace(/\{%\s*(?:github|gh)\s+(https?:\/\/[^\s%]+)\s*%\}/gi, '\n$1\n');
+
+                    // {% gist URL or ID %}
+                    result = result.replace(/\{%\s*gist\s+(https?:\/\/[^\s%]+)\s*%\}/gi, '\n$1\n');
+                    result = result.replace(/\{%\s*gist\s+([^\s%]+)\s*%\}/gi, '\nhttps://gist.github.com/$1\n');
+
+                    // {% link URL %} - internal Dev.to links
+                    result = result.replace(/\{%\s*link\s+(https?:\/\/[^\s%]+)\s*%\}/gi, '\n$1\n');
+
+                    // {% spotify URL %}
+                    result = result.replace(/\{%\s*spotify\s+(https?:\/\/[^\s%]+)\s*%\}/gi, '\n$1\n');
+
+                    // {% soundcloud URL %}
+                    result = result.replace(/\{%\s*soundcloud\s+(https?:\/\/[^\s%]+)\s*%\}/gi, '\n$1\n');
+
+                    // {% stackblitz ID %}
+                    result = result.replace(/\{%\s*stackblitz\s+([^\s%]+)\s*%\}/gi, '\nhttps://stackblitz.com/edit/$1\n');
+
+                    // {% replit URL or @user/repl %}
+                    result = result.replace(/\{%\s*replit\s+(https?:\/\/[^\s%]+)\s*%\}/gi, '\n$1\n');
+                    result = result.replace(/\{%\s*replit\s+@([^\s%]+)\s*%\}/gi, '\nhttps://replit.com/@$1\n');
+
+                    // {% glitch ID %}
+                    result = result.replace(/\{%\s*glitch\s+([^\s%]+)\s*%\}/gi, '\nhttps://glitch.com/edit/#!/$1\n');
+
+                    // {% slideshare KEY %}
+                    result = result.replace(/\{%\s*slideshare\s+([^\s%]+)\s*%\}/gi, '\nhttps://www.slideshare.net/slideshow/embed_code/$1\n');
+
+                    // {% speakerdeck ID %}
+                    result = result.replace(/\{%\s*speakerdeck\s+([^\s%]+)\s*%\}/gi, '\nhttps://speakerdeck.com/$1\n');
+
+                    // Clean up multiple newlines
+                    result = result.replace(/\n{3,}/g, '\n\n');
+
+                    return result;
+                },
+
                 // Copy markdown to clipboard
                 async copyMarkdown() {
                     try {
-                        await navigator.clipboard.writeText(this.articleMarkdown);
+                        const markdown = this.transformForDiscourse(this.articleMarkdown);
+                        await navigator.clipboard.writeText(markdown);
                         this.copied = true;
                         setTimeout(() => this.copied = false, 2000);
                     } catch (e) {
@@ -739,7 +806,8 @@
 
                 // Download markdown file
                 downloadMarkdown() {
-                    const blob = new Blob([this.articleMarkdown], { type: 'text/markdown' });
+                    const markdown = this.transformForDiscourse(this.articleMarkdown);
+                    const blob = new Blob([markdown], { type: 'text/markdown' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
