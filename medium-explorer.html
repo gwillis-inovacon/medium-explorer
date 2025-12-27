@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medium Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .prose img { max-width: 100%; height: auto; }
+        .prose pre { background: #1e293b; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; }
+        .prose code { background: #334155; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.875rem; }
+        .prose pre code { background: transparent; padding: 0; }
+        .prose blockquote { border-left: 4px solid #10b981; padding-left: 1rem; font-style: italic; color: #9ca3af; }
+        .prose h1, .prose h2, .prose h3 { color: #f1f5f9; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+        .prose p { margin-bottom: 1rem; line-height: 1.75; }
+        .prose ul, .prose ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+        .prose li { margin-bottom: 0.5rem; }
+        .prose a { color: #10b981; text-decoration: underline; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    <div x-data="mediumExplorer()" x-cloak class="flex flex-col h-screen">
+        <!-- Header -->
+        <header class="bg-slate-800 border-b border-slate-700 px-6 py-4">
+            <div class="flex items-center justify-between">
+                <h1 class="text-2xl font-bold text-emerald-400">Medium Explorer</h1>
+                <div class="flex items-center gap-4">
+                    <span class="text-sm text-slate-400">API Key:</span>
+                    <span class="text-sm font-mono bg-slate-700 px-2 py-1 rounded">
+                        <span x-text="apiKey ? '••••••' + apiKey.slice(-4) : 'Not set'"></span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Search and Category Bar -->
+            <div class="flex items-center gap-4 mt-4">
+                <select x-model="selectedCategory" @change="loadTopWriters()"
+                    class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+                    <template x-for="cat in categories" :key="cat.slug">
+                        <option :value="cat.slug" x-text="cat.name"></option>
+                    </template>
+                </select>
+
+                <div class="flex-1 flex gap-2">
+                    <input type="text" x-model="searchQuery" @keyup.enter="performSearch()"
+                        placeholder="Search users or articles..."
+                        class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+                    <button @click="performSearch()"
+                        class="bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+                        Search
+                    </button>
+                </div>
+
+                <select x-model="searchType" class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+                    <option value="users">Users</option>
+                    <option value="articles">Articles</option>
+                </select>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Writers Panel -->
+            <aside class="w-80 bg-slate-800 border-r border-slate-700 flex flex-col">
+                <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-slate-200">
+                        <span x-show="!searchResults">Top Writers</span>
+                        <span x-show="searchResults">Search Results</span>
+                    </h2>
+                    <button x-show="searchResults" @click="clearSearch()"
+                        class="text-xs text-slate-400 hover:text-slate-200">Clear</button>
+                </div>
+
+                <!-- Loading State -->
+                <div x-show="loadingWriters" class="flex-1 flex items-center justify-center">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400"></div>
+                </div>
+
+                <!-- Writers List -->
+                <div x-show="!loadingWriters" class="flex-1 overflow-y-auto p-4 space-y-3">
+                    <template x-for="writer in writers" :key="writer.id">
+                        <div @click="selectWriter(writer)"
+                            :class="{'ring-2 ring-emerald-500': selectedWriter?.id === writer.id}"
+                            class="bg-slate-700 rounded-lg p-3 cursor-pointer hover:bg-slate-600 transition">
+                            <div class="flex items-start gap-3">
+                                <img :src="writer.image_url || 'https://via.placeholder.com/48'"
+                                    class="w-12 h-12 rounded-full object-cover bg-slate-600">
+                                <div class="flex-1 min-w-0">
+                                    <h3 class="font-medium text-slate-100 truncate" x-text="writer.fullname || 'Loading...'"></h3>
+                                    <p class="text-sm text-slate-400" x-text="'@' + (writer.username || writer.id)"></p>
+                                    <div class="flex gap-3 mt-1 text-xs text-slate-500">
+                                        <span x-text="formatNumber(writer.followers_count) + ' followers'"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <p x-show="writer.bio" class="text-xs text-slate-400 mt-2 line-clamp-2" x-text="writer.bio"></p>
+                        </div>
+                    </template>
+
+                    <div x-show="writers.length === 0 && !loadingWriters" class="text-center text-slate-500 py-8">
+                        <p>No writers found</p>
+                    </div>
+                </div>
+
+                <!-- Export Writers -->
+                <div x-show="writers.length > 0" class="p-4 border-t border-slate-700 flex gap-2">
+                    <button @click="exportWriters('csv')"
+                        class="flex-1 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-xs font-medium transition">
+                        Export CSV
+                    </button>
+                    <button @click="exportWriters('json')"
+                        class="flex-1 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-xs font-medium transition">
+                        Export JSON
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Articles Panel -->
+            <section class="flex-1 flex flex-col border-r border-slate-700 bg-slate-850">
+                <div class="p-4 border-b border-slate-700 bg-slate-800">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-semibold text-slate-200">
+                            <span x-show="selectedWriter" x-text="'Articles by ' + (selectedWriter?.fullname || '')"></span>
+                            <span x-show="!selectedWriter && searchArticles.length > 0">Search Results</span>
+                            <span x-show="!selectedWriter && searchArticles.length === 0">Select a writer</span>
+                        </h2>
+                        <div x-show="articles.length > 0 || searchArticles.length > 0" class="flex items-center gap-2">
+                            <select x-model="sortBy" @change="sortArticles()"
+                                class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs">
+                                <option value="claps">Sort by Claps</option>
+                                <option value="date">Sort by Date</option>
+                                <option value="reading_time">Sort by Read Time</option>
+                            </select>
+                            <button @click="exportArticles('csv')"
+                                class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-xs transition">CSV</button>
+                            <button @click="exportArticles('json')"
+                                class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-xs transition">JSON</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div x-show="loadingArticles" class="flex-1 flex items-center justify-center bg-slate-800/50">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400"></div>
+                </div>
+
+                <!-- Articles List -->
+                <div x-show="!loadingArticles" class="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-800/50">
+                    <template x-for="article in displayedArticles" :key="article.id">
+                        <div @click="selectArticle(article)"
+                            :class="{'ring-2 ring-emerald-500': selectedArticle?.id === article.id}"
+                            class="bg-slate-700 rounded-lg p-4 cursor-pointer hover:bg-slate-600 transition">
+                            <h3 class="font-medium text-slate-100 mb-1" x-text="article.title"></h3>
+                            <p x-show="article.subtitle" class="text-sm text-slate-400 mb-2 line-clamp-1" x-text="article.subtitle"></p>
+                            <div class="flex items-center gap-4 text-xs text-slate-500">
+                                <span class="flex items-center gap-1">
+                                    <span>👏</span>
+                                    <span x-text="formatNumber(article.claps)"></span>
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <span>💬</span>
+                                    <span x-text="article.responses_count || 0"></span>
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <span>⏱</span>
+                                    <span x-text="article.reading_time + ' min'"></span>
+                                </span>
+                                <span class="text-slate-600" x-text="formatDate(article.published_at)"></span>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div x-show="displayedArticles.length === 0 && !loadingArticles"
+                        class="flex-1 flex items-center justify-center text-slate-500 py-8">
+                        <p x-show="selectedWriter">No articles found</p>
+                        <p x-show="!selectedWriter">Select a writer to see their articles</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Article Reader Panel -->
+            <section class="w-[500px] flex flex-col bg-slate-800">
+                <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-slate-200">Article Reader</h2>
+                    <div x-show="selectedArticle" class="flex items-center gap-2">
+                        <button @click="readerTab = 'read'"
+                            :class="readerTab === 'read' ? 'bg-emerald-600' : 'bg-slate-700 hover:bg-slate-600'"
+                            class="px-3 py-1 rounded text-xs font-medium transition">Read</button>
+                        <button @click="readerTab = 'source'"
+                            :class="readerTab === 'source' ? 'bg-emerald-600' : 'bg-slate-700 hover:bg-slate-600'"
+                            class="px-3 py-1 rounded text-xs font-medium transition">Source</button>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div x-show="loadingContent" class="flex-1 flex items-center justify-center">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400"></div>
+                </div>
+
+                <!-- Article Content -->
+                <div x-show="!loadingContent && selectedArticle" class="flex-1 overflow-y-auto">
+                    <!-- Rendered View -->
+                    <div x-show="readerTab === 'read'" class="p-6 prose prose-invert max-w-none"
+                        x-html="renderedMarkdown"></div>
+
+                    <!-- Source View -->
+                    <div x-show="readerTab === 'source'" class="p-4">
+                        <pre class="bg-slate-900 p-4 rounded-lg text-sm text-slate-300 whitespace-pre-wrap overflow-x-auto font-mono"
+                            x-text="articleMarkdown"></pre>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div x-show="!loadingContent && !selectedArticle"
+                    class="flex-1 flex items-center justify-center text-slate-500">
+                    <p>Select an article to read</p>
+                </div>
+
+                <!-- Action Buttons -->
+                <div x-show="selectedArticle && articleMarkdown" class="p-4 border-t border-slate-700 flex gap-2">
+                    <button @click="copyMarkdown()"
+                        class="flex-1 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-sm font-medium transition flex items-center justify-center gap-2">
+                        <span>📋</span>
+                        <span x-text="copied ? 'Copied!' : 'Copy Markdown'"></span>
+                    </button>
+                    <button @click="downloadMarkdown()"
+                        class="flex-1 bg-emerald-600 hover:bg-emerald-700 px-3 py-2 rounded text-sm font-medium transition flex items-center justify-center gap-2">
+                        <span>⬇</span>
+                        <span>Download .md</span>
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Error Toast -->
+        <div x-show="error" x-transition
+            class="fixed bottom-4 right-4 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg max-w-md">
+            <div class="flex items-start gap-3">
+                <span class="text-xl">⚠️</span>
+                <div>
+                    <p class="font-medium">Error</p>
+                    <p class="text-sm" x-text="error"></p>
+                </div>
+                <button @click="error = null" class="ml-auto text-white/80 hover:text-white">✕</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION - Update your API key here
+        // ============================================
+        const API_KEY = '94fadaa36bmsha4bfb21436b0b35p1195bajsnc9656e629757';
+        const API_HOST = 'medium2.p.rapidapi.com';
+        const BASE_URL = 'https://medium2.p.rapidapi.com';
+
+        function mediumExplorer() {
+            return {
+                // Config
+                apiKey: API_KEY,
+
+                // Categories
+                categories: [
+                    { name: 'Artificial Intelligence', slug: 'artificial-intelligence' },
+                    { name: 'Programming', slug: 'programming' },
+                    { name: 'Data Science', slug: 'data-science' },
+                    { name: 'Machine Learning', slug: 'machine-learning' },
+                    { name: 'Technology', slug: 'technology' },
+                    { name: 'Software Engineering', slug: 'software-engineering' },
+                    { name: 'Python', slug: 'python' },
+                    { name: 'JavaScript', slug: 'javascript' },
+                    { name: 'Web Development', slug: 'web-development' },
+                    { name: 'Startup', slug: 'startup' },
+                    { name: 'Product Management', slug: 'product-management' },
+                    { name: 'UX Design', slug: 'ux' },
+                ],
+                selectedCategory: 'artificial-intelligence',
+
+                // State
+                writers: [],
+                articles: [],
+                searchArticles: [],
+                selectedWriter: null,
+                selectedArticle: null,
+                articleMarkdown: '',
+                renderedMarkdown: '',
+
+                // UI State
+                loadingWriters: false,
+                loadingArticles: false,
+                loadingContent: false,
+                readerTab: 'read',
+                sortBy: 'claps',
+                searchQuery: '',
+                searchType: 'users',
+                searchResults: false,
+                copied: false,
+                error: null,
+
+                // Computed
+                get displayedArticles() {
+                    return this.searchArticles.length > 0 ? this.searchArticles : this.articles;
+                },
+
+                // Initialize
+                init() {
+                    this.loadTopWriters();
+                },
+
+                // API Helper
+                async apiCall(endpoint) {
+                    const response = await fetch(`${BASE_URL}${endpoint}`, {
+                        headers: {
+                            'x-rapidapi-host': API_HOST,
+                            'x-rapidapi-key': this.apiKey
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`API error: ${response.status}`);
+                    }
+                    return response.json();
+                },
+
+                // Load top writers for selected category
+                async loadTopWriters() {
+                    this.loadingWriters = true;
+                    this.searchResults = false;
+                    this.writers = [];
+                    this.error = null;
+
+                    try {
+                        const data = await this.apiCall(`/top_writers/${this.selectedCategory}?count=10`);
+                        const writerIds = data.top_writers || [];
+
+                        // Fetch details for each writer
+                        this.writers = await Promise.all(
+                            writerIds.map(async (id) => {
+                                try {
+                                    const userInfo = await this.apiCall(`/user/${id}`);
+                                    return { id, ...userInfo };
+                                } catch (e) {
+                                    return { id, fullname: 'Unknown', username: id };
+                                }
+                            })
+                        );
+                    } catch (e) {
+                        this.error = e.message;
+                    } finally {
+                        this.loadingWriters = false;
+                    }
+                },
+
+                // Select a writer and load their articles
+                async selectWriter(writer) {
+                    this.selectedWriter = writer;
+                    this.selectedArticle = null;
+                    this.articleMarkdown = '';
+                    this.renderedMarkdown = '';
+                    this.searchArticles = [];
+                    this.loadingArticles = true;
+                    this.error = null;
+
+                    try {
+                        const data = await this.apiCall(`/user/${writer.id}/articles`);
+                        const articleIds = data.associated_articles || [];
+
+                        // Fetch details for each article (limit to first 25)
+                        this.articles = await Promise.all(
+                            articleIds.slice(0, 25).map(async (id) => {
+                                try {
+                                    const articleInfo = await this.apiCall(`/article/${id}`);
+                                    return { id, ...articleInfo };
+                                } catch (e) {
+                                    return { id, title: 'Unknown Article', claps: 0 };
+                                }
+                            })
+                        );
+
+                        this.sortArticles();
+                    } catch (e) {
+                        this.error = e.message;
+                    } finally {
+                        this.loadingArticles = false;
+                    }
+                },
+
+                // Sort articles
+                sortArticles() {
+                    const arr = this.searchArticles.length > 0 ? this.searchArticles : this.articles;
+                    arr.sort((a, b) => {
+                        if (this.sortBy === 'claps') return (b.claps || 0) - (a.claps || 0);
+                        if (this.sortBy === 'date') return new Date(b.published_at) - new Date(a.published_at);
+                        if (this.sortBy === 'reading_time') return (b.reading_time || 0) - (a.reading_time || 0);
+                        return 0;
+                    });
+                },
+
+                // Select an article and load its content
+                async selectArticle(article) {
+                    this.selectedArticle = article;
+                    this.loadingContent = true;
+                    this.articleMarkdown = '';
+                    this.renderedMarkdown = '';
+                    this.error = null;
+
+                    try {
+                        const data = await this.apiCall(`/article/${article.id}/markdown`);
+                        this.articleMarkdown = data.markdown || '';
+                        this.renderedMarkdown = marked.parse(this.articleMarkdown);
+                    } catch (e) {
+                        this.error = e.message;
+                    } finally {
+                        this.loadingContent = false;
+                    }
+                },
+
+                // Search
+                async performSearch() {
+                    if (!this.searchQuery.trim()) return;
+
+                    this.error = null;
+
+                    if (this.searchType === 'users') {
+                        this.loadingWriters = true;
+                        this.searchResults = true;
+                        this.writers = [];
+
+                        try {
+                            const data = await this.apiCall(`/search/users?query=${encodeURIComponent(this.searchQuery)}`);
+                            const userIds = data.users || [];
+
+                            this.writers = await Promise.all(
+                                userIds.slice(0, 10).map(async (id) => {
+                                    try {
+                                        const userInfo = await this.apiCall(`/user/${id}`);
+                                        return { id, ...userInfo };
+                                    } catch (e) {
+                                        return { id, fullname: 'Unknown', username: id };
+                                    }
+                                })
+                            );
+                        } catch (e) {
+                            this.error = e.message;
+                        } finally {
+                            this.loadingWriters = false;
+                        }
+                    } else {
+                        this.loadingArticles = true;
+                        this.selectedWriter = null;
+                        this.searchArticles = [];
+
+                        try {
+                            const data = await this.apiCall(`/search/articles?query=${encodeURIComponent(this.searchQuery)}`);
+                            const articleIds = data.articles || [];
+
+                            this.searchArticles = await Promise.all(
+                                articleIds.slice(0, 20).map(async (id) => {
+                                    try {
+                                        const articleInfo = await this.apiCall(`/article/${id}`);
+                                        return { id, ...articleInfo };
+                                    } catch (e) {
+                                        return { id, title: 'Unknown Article', claps: 0 };
+                                    }
+                                })
+                            );
+
+                            this.sortArticles();
+                        } catch (e) {
+                            this.error = e.message;
+                        } finally {
+                            this.loadingArticles = false;
+                        }
+                    }
+                },
+
+                // Clear search
+                clearSearch() {
+                    this.searchQuery = '';
+                    this.searchResults = false;
+                    this.searchArticles = [];
+                    this.loadTopWriters();
+                },
+
+                // Copy markdown to clipboard
+                async copyMarkdown() {
+                    try {
+                        await navigator.clipboard.writeText(this.articleMarkdown);
+                        this.copied = true;
+                        setTimeout(() => this.copied = false, 2000);
+                    } catch (e) {
+                        this.error = 'Failed to copy to clipboard';
+                    }
+                },
+
+                // Download markdown file
+                downloadMarkdown() {
+                    const blob = new Blob([this.articleMarkdown], { type: 'text/markdown' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${this.selectedArticle.title?.replace(/[^a-z0-9]/gi, '-') || 'article'}.md`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                },
+
+                // Export writers
+                exportWriters(format) {
+                    const data = this.writers.map(w => ({
+                        id: w.id,
+                        name: w.fullname,
+                        username: w.username,
+                        followers: w.followers_count,
+                        bio: w.bio
+                    }));
+
+                    if (format === 'json') {
+                        this.downloadFile(JSON.stringify(data, null, 2), 'writers.json', 'application/json');
+                    } else {
+                        const csv = this.toCSV(data);
+                        this.downloadFile(csv, 'writers.csv', 'text/csv');
+                    }
+                },
+
+                // Export articles
+                exportArticles(format) {
+                    const arr = this.displayedArticles;
+                    const data = arr.map(a => ({
+                        id: a.id,
+                        title: a.title,
+                        subtitle: a.subtitle,
+                        claps: a.claps,
+                        responses: a.responses_count,
+                        reading_time: a.reading_time,
+                        published_at: a.published_at,
+                        url: a.url
+                    }));
+
+                    if (format === 'json') {
+                        this.downloadFile(JSON.stringify(data, null, 2), 'articles.json', 'application/json');
+                    } else {
+                        const csv = this.toCSV(data);
+                        this.downloadFile(csv, 'articles.csv', 'text/csv');
+                    }
+                },
+
+                // Convert to CSV
+                toCSV(data) {
+                    if (data.length === 0) return '';
+                    const headers = Object.keys(data[0]);
+                    const rows = data.map(row =>
+                        headers.map(h => {
+                            const val = row[h] ?? '';
+                            return `"${String(val).replace(/"/g, '""')}"`;
+                        }).join(',')
+                    );
+                    return [headers.join(','), ...rows].join('\n');
+                },
+
+                // Download file helper
+                downloadFile(content, filename, type) {
+                    const blob = new Blob([content], { type });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                },
+
+                // Format number (1000 -> 1k)
+                formatNumber(num) {
+                    if (!num) return '0';
+                    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+                    return num.toString();
+                },
+
+                // Format date
+                formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    const date = new Date(dateStr);
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                }
+            };
+        }
+    </script>
+</body>
+</html>
