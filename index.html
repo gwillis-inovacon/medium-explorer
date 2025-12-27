@@ -97,6 +97,33 @@
                                 </div>
                             </div>
                             <p x-show="writer.bio" class="text-xs text-slate-400 mt-2 line-clamp-2" x-text="writer.bio"></p>
+
+                            <!-- Social Links -->
+                            <div x-show="writer.twitter_username || writer.linkedin_url || writer.website_url"
+                                class="flex items-center gap-2 mt-2 pt-2 border-t border-slate-600">
+                                <a x-show="writer.twitter_username"
+                                    :href="'https://twitter.com/' + writer.twitter_username"
+                                    target="_blank"
+                                    @click.stop
+                                    class="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1">
+                                    <span>𝕏</span>
+                                    <span x-text="'@' + writer.twitter_username"></span>
+                                </a>
+                                <a x-show="writer.linkedin_url"
+                                    :href="writer.linkedin_url"
+                                    target="_blank"
+                                    @click.stop
+                                    class="text-xs text-blue-400 hover:text-blue-300">
+                                    LinkedIn
+                                </a>
+                                <a x-show="writer.website_url"
+                                    :href="writer.website_url"
+                                    target="_blank"
+                                    @click.stop
+                                    class="text-xs text-emerald-400 hover:text-emerald-300 truncate max-w-[120px]"
+                                    x-text="writer.website_url.replace(/^https?:\/\//, '')">
+                                </a>
+                            </div>
                         </div>
                     </template>
 
