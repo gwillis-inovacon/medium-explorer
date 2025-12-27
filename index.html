@@ -628,7 +628,10 @@
                         } else {
                             // Dev.to - fetch full article with body_markdown
                             const fullArticle = await this.devtoApiCall(`/articles/${article.id}`);
-                            this.articleMarkdown = fullArticle.body_markdown || '';
+                            const body = fullArticle.body_markdown || '';
+                            // Prepend title as H1 since Dev.to stores it separately
+                            const title = fullArticle.title || article.title || '';
+                            this.articleMarkdown = title ? `# ${title}\n\n${body}` : body;
                         }
                         this.renderedMarkdown = marked.parse(this.articleMarkdown);
                     } catch (e) {
