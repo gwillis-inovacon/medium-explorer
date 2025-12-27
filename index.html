@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Medium Explorer</title>
+    <title>Content Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -22,24 +22,42 @@
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
-    <div x-data="mediumExplorer()" x-cloak class="flex flex-col h-screen">
+    <div x-data="contentExplorer()" x-cloak class="flex flex-col h-screen">
         <!-- Header -->
         <header class="bg-slate-800 border-b border-slate-700 px-6 py-4">
             <div class="flex items-center justify-between">
-                <h1 class="text-2xl font-bold text-emerald-400">Medium Explorer</h1>
+                <h1 class="text-2xl font-bold text-emerald-400">Content Explorer</h1>
                 <div class="flex items-center gap-4">
-                    <span class="text-sm text-slate-400">API Key:</span>
-                    <span class="text-sm font-mono bg-slate-700 px-2 py-1 rounded">
-                        <span x-text="apiKey ? '••••••' + apiKey.slice(-4) : 'Not set'"></span>
-                    </span>
+                    <!-- Source Toggle -->
+                    <div class="flex items-center bg-slate-700 rounded-lg p-1">
+                        <button @click="switchSource('medium')"
+                            :class="source === 'medium' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'"
+                            class="px-3 py-1 rounded text-sm font-medium transition">
+                            Medium
+                        </button>
+                        <button @click="switchSource('devto')"
+                            :class="source === 'devto' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'"
+                            class="px-3 py-1 rounded text-sm font-medium transition">
+                            Dev.to
+                        </button>
+                    </div>
+                    <div x-show="source === 'medium'" class="flex items-center gap-2">
+                        <span class="text-sm text-slate-400">API Key:</span>
+                        <span class="text-sm font-mono bg-slate-700 px-2 py-1 rounded">
+                            <span x-text="apiKey ? '••••••' + apiKey.slice(-4) : 'Not set'"></span>
+                        </span>
+                    </div>
+                    <div x-show="source === 'devto'" class="text-sm text-slate-400">
+                        Free API - No key required
+                    </div>
                 </div>
             </div>
 
             <!-- Search and Category Bar -->
             <div class="flex items-center gap-4 mt-4">
-                <select x-model="selectedCategory" @change="loadTopWriters()"
+                <select x-model="selectedCategory" @change="loadContent()"
                     class="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-                    <template x-for="cat in categories" :key="cat.slug">
+                    <template x-for="cat in currentCategories" :key="cat.slug">
                         <option :value="cat.slug" x-text="cat.name"></option>
                     </template>
                 </select>
@@ -67,7 +85,8 @@
             <aside class="w-80 bg-slate-800 border-r border-slate-700 flex flex-col">
                 <div class="p-4 border-b border-slate-700 flex items-center justify-between">
                     <h2 class="font-semibold text-slate-200">
-                        <span x-show="!searchResults">Top Writers</span>
+                        <span x-show="!searchResults && source === 'medium'">Top Writers</span>
+                        <span x-show="!searchResults && source === 'devto'">Top Authors</span>
                         <span x-show="searchResults">Search Results</span>
                     </h2>
                     <button x-show="searchResults" @click="clearSearch()"
@@ -86,20 +105,21 @@
                             :class="{'ring-2 ring-emerald-500': selectedWriter?.id === writer.id}"
                             class="bg-slate-700 rounded-lg p-3 cursor-pointer hover:bg-slate-600 transition">
                             <div class="flex items-start gap-3">
-                                <img :src="writer.image_url || 'https://via.placeholder.com/48'"
+                                <img :src="writer.image_url || writer.profile_image || 'https://via.placeholder.com/48'"
                                     class="w-12 h-12 rounded-full object-cover bg-slate-600">
                                 <div class="flex-1 min-w-0">
-                                    <h3 class="font-medium text-slate-100 truncate" x-text="writer.fullname || 'Loading...'"></h3>
+                                    <h3 class="font-medium text-slate-100 truncate" x-text="writer.fullname || writer.name || 'Loading...'"></h3>
                                     <p class="text-sm text-slate-400" x-text="'@' + (writer.username || writer.id)"></p>
-                                    <div class="flex gap-3 mt-1 text-xs text-slate-500">
-                                        <span x-text="formatNumber(writer.followers_count) + ' followers'"></span>
+                                    <div class="flex gap-3 mt-1 text-xs text-slate-400">
+                                        <span x-show="writer.followers_count !== undefined" x-text="formatNumber(writer.followers_count) + ' followers'"></span>
+                                        <span x-show="writer.location" x-text="writer.location"></span>
                                     </div>
                                 </div>
                             </div>
-                            <p x-show="writer.bio" class="text-xs text-slate-400 mt-2 line-clamp-2" x-text="writer.bio"></p>
+                            <p x-show="writer.bio || writer.summary" class="text-xs text-slate-400 mt-2 line-clamp-2" x-text="writer.bio || writer.summary"></p>
 
-                            <!-- Social Links -->
-                            <div class="flex items-center gap-3 mt-2 pt-2 border-t border-slate-600">
+                            <!-- Social Links - Medium -->
+                            <div x-show="source === 'medium'" class="flex items-center gap-3 mt-2 pt-2 border-t border-slate-600">
                                 <a :href="'https://medium.com/@' + writer.username"
                                     target="_blank"
                                     @click.stop
@@ -121,6 +141,40 @@
                                     @click.stop
                                     class="text-xs text-amber-400 hover:text-amber-300">
                                     Tip/Support
+                                </a>
+                            </div>
+
+                            <!-- Social Links - Dev.to -->
+                            <div x-show="source === 'devto'" class="flex flex-wrap items-center gap-3 mt-2 pt-2 border-t border-slate-600">
+                                <a :href="'https://dev.to/' + writer.username"
+                                    target="_blank"
+                                    @click.stop
+                                    class="text-xs text-slate-300 hover:text-white flex items-center gap-1">
+                                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M7.42 10.05c-.18-.16-.46-.23-.84-.23H6v4.36h.58c.37 0 .65-.08.84-.23.21-.17.31-.45.31-.93v-2c0-.49-.1-.77-.31-.97zm13.75-7.98H2.83C1.82 2.07 1 2.9 1 3.9v16.19c0 1.01.82 1.83 1.83 1.83h18.34c1.01 0 1.83-.82 1.83-1.83V3.9c0-1-.82-1.83-1.83-1.83zM8.9 14.3c0 .98-.41 1.88-1.8 1.88H5.1v-8h2.08c1.33 0 1.72.9 1.72 1.88v4.24zm5.02.46h-3.04v-1.8h1.85v-1.57h-1.85V10h3.04V8.54h-4.3v7.48h4.3v-1.26zm4.4-.09c0 .47-.14.85-.4 1.13-.27.3-.67.44-1.17.44-.47 0-.86-.1-1.17-.29v-1.38c.35.21.73.32 1.13.32.2 0 .35-.04.47-.12.12-.08.18-.21.18-.38v-.07c0-.14-.05-.27-.14-.39-.1-.12-.26-.24-.5-.35-.37-.17-.64-.36-.82-.57-.18-.21-.27-.48-.27-.8v-.05c0-.43.14-.78.42-1.03.29-.26.67-.39 1.14-.39.42 0 .8.08 1.15.24v1.3c-.32-.18-.66-.28-1-.28-.18 0-.32.04-.42.11-.1.07-.15.17-.15.3v.04c0 .12.05.23.15.33.1.11.27.22.5.35.38.19.66.4.83.63.18.23.26.51.26.83v.08z"/></svg>
+                                    <span>Profile</span>
+                                </a>
+                                <a x-show="writer.twitter_username"
+                                    :href="'https://twitter.com/' + writer.twitter_username"
+                                    target="_blank"
+                                    @click.stop
+                                    class="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1">
+                                    <span>𝕏</span>
+                                    <span x-text="'@' + writer.twitter_username"></span>
+                                </a>
+                                <a x-show="writer.github_username"
+                                    :href="'https://github.com/' + writer.github_username"
+                                    target="_blank"
+                                    @click.stop
+                                    class="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                                    <span x-text="writer.github_username"></span>
+                                </a>
+                                <a x-show="writer.website_url"
+                                    :href="writer.website_url"
+                                    target="_blank"
+                                    @click.stop
+                                    class="text-xs text-emerald-400 hover:text-emerald-300 truncate max-w-[120px]"
+                                    x-text="writer.website_url.replace(/^https?:\/\//, '')">
                                 </a>
                             </div>
                         </div>
@@ -149,14 +203,15 @@
                 <div class="p-4 border-b border-slate-700 bg-slate-800">
                     <div class="flex items-center justify-between">
                         <h2 class="font-semibold text-slate-200">
-                            <span x-show="selectedWriter" x-text="'Articles by ' + (selectedWriter?.fullname || '')"></span>
+                            <span x-show="selectedWriter" x-text="'Articles by ' + (selectedWriter?.fullname || selectedWriter?.name || '')"></span>
                             <span x-show="!selectedWriter && searchArticles.length > 0">Search Results</span>
-                            <span x-show="!selectedWriter && searchArticles.length === 0">Select a writer</span>
+                            <span x-show="!selectedWriter && searchArticles.length === 0 && source === 'devto' && articles.length > 0">Top Articles</span>
+                            <span x-show="!selectedWriter && searchArticles.length === 0 && articles.length === 0">Select a writer</span>
                         </h2>
                         <div x-show="articles.length > 0 || searchArticles.length > 0" class="flex items-center gap-2">
                             <select x-model="sortBy" @change="sortArticles()"
                                 class="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs">
-                                <option value="claps">Sort by Claps</option>
+                                <option value="reactions">Sort by Reactions</option>
                                 <option value="date">Sort by Date</option>
                                 <option value="reading_time">Sort by Read Time</option>
                             </select>
@@ -180,21 +235,27 @@
                             :class="{'ring-2 ring-emerald-500': selectedArticle?.id === article.id}"
                             class="bg-slate-700 rounded-lg p-4 cursor-pointer hover:bg-slate-600 transition">
                             <h3 class="font-medium text-slate-100 mb-1" x-text="article.title"></h3>
-                            <p x-show="article.subtitle" class="text-sm text-slate-400 mb-2 line-clamp-1" x-text="article.subtitle"></p>
-                            <div class="flex items-center gap-4 text-xs text-slate-300">
+                            <p x-show="article.subtitle || article.description" class="text-sm text-slate-400 mb-2 line-clamp-1" x-text="article.subtitle || article.description"></p>
+                            <div class="flex flex-wrap items-center gap-3 text-xs text-slate-300">
                                 <span class="flex items-center gap-1">
-                                    <span>👏</span>
-                                    <span x-text="formatNumber(article.claps)"></span>
+                                    <span x-text="source === 'medium' ? '👏' : '❤️'"></span>
+                                    <span x-text="formatNumber(article.claps || article.public_reactions_count || 0)"></span>
                                 </span>
                                 <span class="flex items-center gap-1">
                                     <span>💬</span>
-                                    <span x-text="article.responses_count || 0"></span>
+                                    <span x-text="article.responses_count || article.comments_count || 0"></span>
                                 </span>
                                 <span class="flex items-center gap-1">
                                     <span>⏱</span>
-                                    <span x-text="article.reading_time + ' min'"></span>
+                                    <span x-text="(article.reading_time || article.reading_time_minutes || 0) + ' min'"></span>
                                 </span>
-                                <span class="text-slate-400" x-text="formatDate(article.published_at)"></span>
+                                <span class="text-slate-400" x-text="formatDate(article.published_at || article.published_timestamp)"></span>
+                            </div>
+                            <!-- Tags for Dev.to -->
+                            <div x-show="article.tag_list && article.tag_list.length > 0" class="flex flex-wrap gap-1 mt-2">
+                                <template x-for="tag in (article.tag_list || []).slice(0, 4)" :key="tag">
+                                    <span class="text-xs bg-slate-600 text-slate-300 px-2 py-0.5 rounded" x-text="'#' + tag"></span>
+                                </template>
                             </div>
                         </div>
                     </template>
@@ -279,17 +340,19 @@
         // ============================================
         // CONFIGURATION - Update your API key here
         // ============================================
-        const API_KEY = '94fadaa36bmsha4bfb21436b0b35p1195bajsnc9656e629757';
-        const API_HOST = 'medium2.p.rapidapi.com';
-        const BASE_URL = 'https://medium2.p.rapidapi.com';
+        const MEDIUM_API_KEY = '94fadaa36bmsha4bfb21436b0b35p1195bajsnc9656e629757';
+        const MEDIUM_API_HOST = 'medium2.p.rapidapi.com';
+        const MEDIUM_BASE_URL = 'https://medium2.p.rapidapi.com';
+        const DEVTO_BASE_URL = 'https://dev.to/api';
 
-        function mediumExplorer() {
+        function contentExplorer() {
             return {
                 // Config
-                apiKey: API_KEY,
+                apiKey: MEDIUM_API_KEY,
+                source: 'medium', // 'medium' or 'devto'
 
                 // Categories
-                categories: [
+                mediumCategories: [
                     { name: 'Artificial Intelligence', slug: 'artificial-intelligence' },
                     { name: 'Programming', slug: 'programming' },
                     { name: 'Data Science', slug: 'data-science' },
@@ -302,6 +365,20 @@
                     { name: 'Startup', slug: 'startup' },
                     { name: 'Product Management', slug: 'product-management' },
                     { name: 'UX Design', slug: 'ux' },
+                ],
+                devtoCategories: [
+                    { name: 'Top (Week)', slug: 'top-week' },
+                    { name: 'Top (Month)', slug: 'top-month' },
+                    { name: 'Latest', slug: 'latest' },
+                    { name: 'JavaScript', slug: 'javascript' },
+                    { name: 'Python', slug: 'python' },
+                    { name: 'AI', slug: 'ai' },
+                    { name: 'Machine Learning', slug: 'machinelearning' },
+                    { name: 'Web Development', slug: 'webdev' },
+                    { name: 'React', slug: 'react' },
+                    { name: 'Node.js', slug: 'node' },
+                    { name: 'DevOps', slug: 'devops' },
+                    { name: 'Career', slug: 'career' },
                 ],
                 selectedCategory: 'artificial-intelligence',
 
@@ -319,7 +396,7 @@
                 loadingArticles: false,
                 loadingContent: false,
                 readerTab: 'read',
-                sortBy: 'claps',
+                sortBy: 'reactions',
                 searchQuery: '',
                 searchType: 'users',
                 searchResults: false,
@@ -327,20 +404,47 @@
                 error: null,
 
                 // Computed
+                get currentCategories() {
+                    return this.source === 'medium' ? this.mediumCategories : this.devtoCategories;
+                },
+
                 get displayedArticles() {
                     return this.searchArticles.length > 0 ? this.searchArticles : this.articles;
                 },
 
                 // Initialize
                 init() {
-                    this.loadTopWriters();
+                    this.loadContent();
                 },
 
-                // API Helper
-                async apiCall(endpoint) {
-                    const response = await fetch(`${BASE_URL}${endpoint}`, {
+                // Switch source
+                switchSource(newSource) {
+                    if (this.source === newSource) return;
+                    this.source = newSource;
+                    this.selectedCategory = newSource === 'medium' ? 'artificial-intelligence' : 'top-week';
+                    this.writers = [];
+                    this.articles = [];
+                    this.searchArticles = [];
+                    this.selectedWriter = null;
+                    this.selectedArticle = null;
+                    this.searchResults = false;
+                    this.loadContent();
+                },
+
+                // Load content based on source
+                loadContent() {
+                    if (this.source === 'medium') {
+                        this.loadMediumTopWriters();
+                    } else {
+                        this.loadDevtoTopArticles();
+                    }
+                },
+
+                // Medium API Helper
+                async mediumApiCall(endpoint) {
+                    const response = await fetch(`${MEDIUM_BASE_URL}${endpoint}`, {
                         headers: {
-                            'x-rapidapi-host': API_HOST,
+                            'x-rapidapi-host': MEDIUM_API_HOST,
                             'x-rapidapi-key': this.apiKey
                         }
                     });
@@ -350,22 +454,31 @@
                     return response.json();
                 },
 
-                // Load top writers for selected category
-                async loadTopWriters() {
+                // Dev.to API Helper
+                async devtoApiCall(endpoint) {
+                    const response = await fetch(`${DEVTO_BASE_URL}${endpoint}`);
+                    if (!response.ok) {
+                        throw new Error(`API error: ${response.status}`);
+                    }
+                    return response.json();
+                },
+
+                // Load Medium top writers
+                async loadMediumTopWriters() {
                     this.loadingWriters = true;
                     this.searchResults = false;
                     this.writers = [];
+                    this.articles = [];
                     this.error = null;
 
                     try {
-                        const data = await this.apiCall(`/top_writers/${this.selectedCategory}?count=10`);
+                        const data = await this.mediumApiCall(`/top_writers/${this.selectedCategory}?count=10`);
                         const writerIds = data.top_writers || [];
 
-                        // Fetch details for each writer
                         this.writers = await Promise.all(
                             writerIds.map(async (id) => {
                                 try {
-                                    const userInfo = await this.apiCall(`/user/${id}`);
+                                    const userInfo = await this.mediumApiCall(`/user/${id}`);
                                     return { id, ...userInfo };
                                 } catch (e) {
                                     return { id, fullname: 'Unknown', username: id };
@@ -376,6 +489,58 @@
                         this.error = e.message;
                     } finally {
                         this.loadingWriters = false;
+                    }
+                },
+
+                // Load Dev.to top articles and extract authors
+                async loadDevtoTopArticles() {
+                    this.loadingWriters = true;
+                    this.loadingArticles = true;
+                    this.searchResults = false;
+                    this.writers = [];
+                    this.articles = [];
+                    this.error = null;
+
+                    try {
+                        let endpoint = '/articles?per_page=30';
+                        const cat = this.selectedCategory;
+
+                        if (cat === 'top-week') {
+                            endpoint = '/articles?per_page=30&top=7';
+                        } else if (cat === 'top-month') {
+                            endpoint = '/articles?per_page=30&top=30';
+                        } else if (cat === 'latest') {
+                            endpoint = '/articles?per_page=30';
+                        } else {
+                            endpoint = `/articles?per_page=30&tag=${cat}&top=7`;
+                        }
+
+                        const articles = await this.devtoApiCall(endpoint);
+                        this.articles = articles;
+
+                        // Extract unique authors
+                        const authorMap = new Map();
+                        for (const article of articles) {
+                            if (article.user && !authorMap.has(article.user.user_id)) {
+                                authorMap.set(article.user.user_id, {
+                                    id: article.user.user_id,
+                                    username: article.user.username,
+                                    name: article.user.name,
+                                    profile_image: article.user.profile_image,
+                                    twitter_username: article.user.twitter_username,
+                                    github_username: article.user.github_username,
+                                    website_url: article.user.website_url
+                                });
+                            }
+                        }
+                        this.writers = Array.from(authorMap.values()).slice(0, 15);
+
+                        this.sortArticles();
+                    } catch (e) {
+                        this.error = e.message;
+                    } finally {
+                        this.loadingWriters = false;
+                        this.loadingArticles = false;
                     }
                 },
 
@@ -390,20 +555,32 @@
                     this.error = null;
 
                     try {
-                        const data = await this.apiCall(`/user/${writer.id}/articles`);
-                        const articleIds = data.associated_articles || [];
+                        if (this.source === 'medium') {
+                            const data = await this.mediumApiCall(`/user/${writer.id}/articles`);
+                            const articleIds = data.associated_articles || [];
 
-                        // Fetch details for each article (limit to first 25)
-                        this.articles = await Promise.all(
-                            articleIds.slice(0, 25).map(async (id) => {
-                                try {
-                                    const articleInfo = await this.apiCall(`/article/${id}`);
-                                    return { id, ...articleInfo };
-                                } catch (e) {
-                                    return { id, title: 'Unknown Article', claps: 0 };
-                                }
-                            })
-                        );
+                            this.articles = await Promise.all(
+                                articleIds.slice(0, 25).map(async (id) => {
+                                    try {
+                                        const articleInfo = await this.mediumApiCall(`/article/${id}`);
+                                        return { id, ...articleInfo };
+                                    } catch (e) {
+                                        return { id, title: 'Unknown Article', claps: 0 };
+                                    }
+                                })
+                            );
+                        } else {
+                            // Dev.to - fetch user details first for full profile
+                            try {
+                                const userDetails = await this.devtoApiCall(`/users/${writer.id}`);
+                                Object.assign(writer, userDetails);
+                            } catch (e) {
+                                // Continue with existing data
+                            }
+
+                            const articles = await this.devtoApiCall(`/articles?username=${writer.username}&per_page=25`);
+                            this.articles = articles;
+                        }
 
                         this.sortArticles();
                     } catch (e) {
@@ -417,9 +594,21 @@
                 sortArticles() {
                     const arr = this.searchArticles.length > 0 ? this.searchArticles : this.articles;
                     arr.sort((a, b) => {
-                        if (this.sortBy === 'claps') return (b.claps || 0) - (a.claps || 0);
-                        if (this.sortBy === 'date') return new Date(b.published_at) - new Date(a.published_at);
-                        if (this.sortBy === 'reading_time') return (b.reading_time || 0) - (a.reading_time || 0);
+                        if (this.sortBy === 'reactions') {
+                            const aVal = a.claps || a.public_reactions_count || 0;
+                            const bVal = b.claps || b.public_reactions_count || 0;
+                            return bVal - aVal;
+                        }
+                        if (this.sortBy === 'date') {
+                            const aDate = new Date(a.published_at || a.published_timestamp);
+                            const bDate = new Date(b.published_at || b.published_timestamp);
+                            return bDate - aDate;
+                        }
+                        if (this.sortBy === 'reading_time') {
+                            const aVal = a.reading_time || a.reading_time_minutes || 0;
+                            const bVal = b.reading_time || b.reading_time_minutes || 0;
+                            return bVal - aVal;
+                        }
                         return 0;
                     });
                 },
@@ -433,8 +622,14 @@
                     this.error = null;
 
                     try {
-                        const data = await this.apiCall(`/article/${article.id}/markdown`);
-                        this.articleMarkdown = data.markdown || '';
+                        if (this.source === 'medium') {
+                            const data = await this.mediumApiCall(`/article/${article.id}/markdown`);
+                            this.articleMarkdown = data.markdown || '';
+                        } else {
+                            // Dev.to - fetch full article with body_markdown
+                            const fullArticle = await this.devtoApiCall(`/articles/${article.id}`);
+                            this.articleMarkdown = fullArticle.body_markdown || '';
+                        }
                         this.renderedMarkdown = marked.parse(this.articleMarkdown);
                     } catch (e) {
                         this.error = e.message;
@@ -455,19 +650,34 @@
                         this.writers = [];
 
                         try {
-                            const data = await this.apiCall(`/search/users?query=${encodeURIComponent(this.searchQuery)}`);
-                            const userIds = data.users || [];
+                            if (this.source === 'medium') {
+                                const data = await this.mediumApiCall(`/search/users?query=${encodeURIComponent(this.searchQuery)}`);
+                                const userIds = data.users || [];
 
-                            this.writers = await Promise.all(
-                                userIds.slice(0, 10).map(async (id) => {
-                                    try {
-                                        const userInfo = await this.apiCall(`/user/${id}`);
-                                        return { id, ...userInfo };
-                                    } catch (e) {
-                                        return { id, fullname: 'Unknown', username: id };
-                                    }
-                                })
-                            );
+                                this.writers = await Promise.all(
+                                    userIds.slice(0, 10).map(async (id) => {
+                                        try {
+                                            const userInfo = await this.mediumApiCall(`/user/${id}`);
+                                            return { id, ...userInfo };
+                                        } catch (e) {
+                                            return { id, fullname: 'Unknown', username: id };
+                                        }
+                                    })
+                                );
+                            } else {
+                                // Dev.to doesn't have user search, search articles and extract authors
+                                const articles = await this.devtoApiCall(`/articles?per_page=30&username=${encodeURIComponent(this.searchQuery)}`);
+                                if (articles.length > 0 && articles[0].user) {
+                                    const user = articles[0].user;
+                                    const userDetails = await this.devtoApiCall(`/users/${user.user_id}`);
+                                    this.writers = [{
+                                        id: user.user_id,
+                                        ...userDetails
+                                    }];
+                                } else {
+                                    this.writers = [];
+                                }
+                            }
                         } catch (e) {
                             this.error = e.message;
                         } finally {
@@ -479,19 +689,25 @@
                         this.searchArticles = [];
 
                         try {
-                            const data = await this.apiCall(`/search/articles?query=${encodeURIComponent(this.searchQuery)}`);
-                            const articleIds = data.articles || [];
+                            if (this.source === 'medium') {
+                                const data = await this.mediumApiCall(`/search/articles?query=${encodeURIComponent(this.searchQuery)}`);
+                                const articleIds = data.articles || [];
 
-                            this.searchArticles = await Promise.all(
-                                articleIds.slice(0, 20).map(async (id) => {
-                                    try {
-                                        const articleInfo = await this.apiCall(`/article/${id}`);
-                                        return { id, ...articleInfo };
-                                    } catch (e) {
-                                        return { id, title: 'Unknown Article', claps: 0 };
-                                    }
-                                })
-                            );
+                                this.searchArticles = await Promise.all(
+                                    articleIds.slice(0, 20).map(async (id) => {
+                                        try {
+                                            const articleInfo = await this.mediumApiCall(`/article/${id}`);
+                                            return { id, ...articleInfo };
+                                        } catch (e) {
+                                            return { id, title: 'Unknown Article', claps: 0 };
+                                        }
+                                    })
+                                );
+                            } else {
+                                // Dev.to article search by tag
+                                const articles = await this.devtoApiCall(`/articles?per_page=20&tag=${encodeURIComponent(this.searchQuery)}`);
+                                this.searchArticles = articles;
+                            }
 
                             this.sortArticles();
                         } catch (e) {
@@ -507,7 +723,7 @@
                     this.searchQuery = '';
                     this.searchResults = false;
                     this.searchArticles = [];
-                    this.loadTopWriters();
+                    this.loadContent();
                 },
 
                 // Copy markdown to clipboard
@@ -536,10 +752,13 @@
                 exportWriters(format) {
                     const data = this.writers.map(w => ({
                         id: w.id,
-                        name: w.fullname,
+                        name: w.fullname || w.name,
                         username: w.username,
                         followers: w.followers_count,
-                        bio: w.bio
+                        bio: w.bio || w.summary,
+                        twitter: w.twitter_username,
+                        github: w.github_username,
+                        website: w.website_url
                     }));
 
                     if (format === 'json') {
@@ -556,12 +775,13 @@
                     const data = arr.map(a => ({
                         id: a.id,
                         title: a.title,
-                        subtitle: a.subtitle,
-                        claps: a.claps,
-                        responses: a.responses_count,
-                        reading_time: a.reading_time,
-                        published_at: a.published_at,
-                        url: a.url
+                        subtitle: a.subtitle || a.description,
+                        reactions: a.claps || a.public_reactions_count,
+                        comments: a.responses_count || a.comments_count,
+                        reading_time: a.reading_time || a.reading_time_minutes,
+                        published_at: a.published_at || a.published_timestamp,
+                        url: a.url,
+                        tags: a.tag_list?.join(', ') || ''
                     }));
 
                     if (format === 'json') {
