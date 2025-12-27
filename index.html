@@ -99,9 +99,15 @@
                             <p x-show="writer.bio" class="text-xs text-slate-400 mt-2 line-clamp-2" x-text="writer.bio"></p>
 
                             <!-- Social Links -->
-                            <div x-show="writer.twitter_username || writer.linkedin_url || writer.website_url"
-                                class="flex items-center gap-2 mt-2 pt-2 border-t border-slate-600">
-                                <a x-show="writer.twitter_username"
+                            <div class="flex items-center gap-3 mt-2 pt-2 border-t border-slate-600">
+                                <a :href="'https://medium.com/@' + writer.username"
+                                    target="_blank"
+                                    @click.stop
+                                    class="text-xs text-slate-300 hover:text-white flex items-center gap-1">
+                                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M13.54 12a6.8 6.8 0 01-6.77 6.82A6.8 6.8 0 010 12a6.8 6.8 0 016.77-6.82A6.8 6.8 0 0113.54 12zM20.96 12c0 3.54-1.51 6.42-3.38 6.42-1.87 0-3.39-2.88-3.39-6.42s1.52-6.42 3.39-6.42 3.38 2.88 3.38 6.42M24 12c0 3.17-.53 5.75-1.19 5.75-.66 0-1.19-2.58-1.19-5.75s.53-5.75 1.19-5.75C23.47 6.25 24 8.83 24 12z"/></svg>
+                                    <span>Profile</span>
+                                </a>
+                                <a x-show="writer.twitter_username && writer.twitter_username.length > 0"
                                     :href="'https://twitter.com/' + writer.twitter_username"
                                     target="_blank"
                                     @click.stop
@@ -109,19 +115,12 @@
                                     <span>𝕏</span>
                                     <span x-text="'@' + writer.twitter_username"></span>
                                 </a>
-                                <a x-show="writer.linkedin_url"
-                                    :href="writer.linkedin_url"
+                                <a x-show="writer.tipping_link"
+                                    :href="writer.tipping_link"
                                     target="_blank"
                                     @click.stop
-                                    class="text-xs text-blue-400 hover:text-blue-300">
-                                    LinkedIn
-                                </a>
-                                <a x-show="writer.website_url"
-                                    :href="writer.website_url"
-                                    target="_blank"
-                                    @click.stop
-                                    class="text-xs text-emerald-400 hover:text-emerald-300 truncate max-w-[120px]"
-                                    x-text="writer.website_url.replace(/^https?:\/\//, '')">
+                                    class="text-xs text-amber-400 hover:text-amber-300">
+                                    Tip/Support
                                 </a>
                             </div>
                         </div>
