@@ -338,17 +338,14 @@
 
     <script>
         // ============================================
-        // CONFIGURATION - Update your API key here
+        // CONFIGURATION
         // ============================================
-        const MEDIUM_API_KEY = '94fadaa36bmsha4bfb21436b0b35p1195bajsnc9656e629757';
-        const MEDIUM_API_HOST = 'medium2.p.rapidapi.com';
-        const MEDIUM_BASE_URL = 'https://medium2.p.rapidapi.com';
+        const MEDIUM_PROXY_URL = '/.netlify/functions/medium-proxy';
         const DEVTO_BASE_URL = 'https://dev.to/api';
 
         function contentExplorer() {
             return {
                 // Config
-                apiKey: MEDIUM_API_KEY,
                 source: 'medium', // 'medium' or 'devto'
 
                 // Categories
@@ -440,14 +437,9 @@
                     }
                 },
 
-                // Medium API Helper
+                // Medium API Helper (proxied through Netlify Function)
                 async mediumApiCall(endpoint) {
-                    const response = await fetch(`${MEDIUM_BASE_URL}${endpoint}`, {
-                        headers: {
-                            'x-rapidapi-host': MEDIUM_API_HOST,
-                            'x-rapidapi-key': this.apiKey
-                        }
-                    });
+                    const response = await fetch(`${MEDIUM_PROXY_URL}?endpoint=${encodeURIComponent(endpoint)}`);
                     if (!response.ok) {
                         throw new Error(`API error: ${response.status}`);
                     }
